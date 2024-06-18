@@ -1,0 +1,13 @@
+{
+  "domain_field": "Age",
+  "raw_data_path": "raw_data/ml_1m",
+  "processed_data_path": "processed_data",
+  "split_save_path": "split_by_age",
+  "split_policy": "split_by_age",
+  "seed": 123,
+  "train_val_test": [
+    0.6,
+    0.2,
+    0.2
+  ]
+}
