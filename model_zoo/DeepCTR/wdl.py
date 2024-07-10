@@ -40,7 +40,7 @@ def WDL(linear_feature_columns, dnn_feature_columns, n_domain, lora_reduce, dnn_
 
     dnn_input = combined_dnn_input(sparse_embedding_list, dense_value_list)
 
-
+    # dnn_out = DNN(dnn_hidden_units, dnn_activation, l2_reg_dnn, dnn_dropout, False, seed=seed)(dnn_input)
     dnn_out = Mlora(n_domain, dnn_hidden_units, dnn_activation, l2_reg_dnn, dnn_dropout, False, seed=seed,lora_reduce=lora_reduce)([dnn_input,domain_input_layer])
 
     dnn_logit = tf.keras.layers.Dense(

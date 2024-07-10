@@ -12,20 +12,16 @@ from tensorflow.python.keras.models import Model
 from utils.auc import AUC  # This can be replaced by tf.keras.AUC when tf version >=1.12
 from .partitioned_norm import PartitionedNorm
 from .domain_norm import DomainNorm
-from .multi_domain_norm import MultiDomainNorm
-from .multi_domain_norm2 import MultiDomainNorm as MultiDomainNorm2
 
 # 正常LoRA
 from .mlora_fcn import MLoRAFCN
-# 跃层LoRA
-from .mlora_fcn_skip import MLoRAFCN as MLoRAFCN_SKIP
+
 # 先单独训练MLP
 from .mlora_fcn_pretrain import MLoRAFCN as MLoRAFCN_PRE
 # freeze W,训练lora
 from .mlora_fcn_freeze import MLoRAFCN as MLoRAFCN_FREEZE
 # with generator weight,pretrain and finetune
-from .mlora_fcn_generator_pretrain import MLoRAFCN as MLoRAFCN_GENERATOR_PRETRAIN
-from .mlora_fcn_generate import MLoRAFCN as MLoRAFCN_GENERATOR
+
 
 from .auxiliary_net import AuxiliaryNet
 from ..base_model import BaseModel
@@ -36,9 +32,7 @@ class MLoRA(BaseModel):
         super(MLoRA, self).__init__(dataset, config)
 
     def build_model(self):
-        # self.n_domain_1 = self.dataset.n_domain_1
-        # self.n_domain_2 = self.dataset.n_domain_2
-        # self.n_domain = self.dataset.n_domain
+
         model = self.build_model_structure()
         model.summary()
         # Optimization
@@ -130,8 +124,6 @@ class MLoRA(BaseModel):
         inputs, x, domain_emb = self.build_inputs()
 
         domain_indicator = inputs[-1]
-        # domain_indicator1 = inputs[-2]
-        # domain_indicator2 = inputs[-1]
         # PartitionedNorm
 
         # freeze PareitionNorm层
@@ -144,15 +136,6 @@ class MLoRA(BaseModel):
                 x = PartitionedNorm(self.n_domain, trainable=False)([x, domain_indicator])
 
 
-        # elif self.model_config['norm'] == "dn":
-        #     x = DomainNorm(self.n_domain_1)([x, domain_indicator])
-        # elif self.model_config['norm'] == "dn2":
-        #     x = DomainNorm(self.n_domain_1)([x, domain_indicator])
-            # x = DomainNorm(self.n_domain_2)([x, domain_indicator2])
-        # elif self.model_config['norm'] == "mdn":
-        #     x = MultiDomainNorm(self.n_domain, self.n_domain_1, self.n_domain_2)([x, domain_indicator, domain_indicator1, domain_indicator2])
-        # elif self.model_config['norm'] == "mdn_simple":
-        #     x = MultiDomainNorm2(self.n_domain_1, self.n_domain_2)([x, domain_indicator1, domain_indicator2])
         elif self.model_config['norm'] == "bn":
             x = layers.BatchNormalization()(x)
 
@@ -165,77 +148,28 @@ class MLoRA(BaseModel):
             lora_reduce = self.model_config["lora_reduce"]
             dropout_rate = self.model_config["dropout"]
             for i, h_dim in enumerate(self.model_config['hidden_dim']):
-                lora_reduce_list = self.model_config["lora_reduce_list"][i]
-                lora_weight_list = self.model_config["lora_weight_list"][i]
                 x = MLoRAFCN(self.n_domain, h_dim, activation="relu", lora_r=lora_r, lora_reduce=lora_reduce, dropout_rate=dropout_rate,
-                             is_finetune=self.train_config['train_from_ckp'],
-                             lora_reduce_list=lora_reduce_list,
-                             lora_weight_list=lora_weight_list
+                             is_finetune=self.train_config['train_from_ckp']
                              )([x, domain_indicator])
-        elif "mlora_skip" in self.model_config['dense']:
-            lora_r = self.model_config["lora_r"]
-            lora_reduce = self.model_config["lora_reduce"]
-            dropout_rate = self.model_config["dropout"]
-            h_dim = self.model_config['hidden_dim'][-1]
-            x = MLoRAFCN_SKIP(self.n_domain, h_dim, activation="relu", lora_r=lora_r, lora_reduce=lora_reduce, dropout_rate=dropout_rate,
-                             is_finetune=self.train_config['train_from_ckp'],
-                             n_domain=self.n_domain
-                             )([x, domain_indicator])
+
         elif "mlora_freeze" in self.model_config['dense']:
             if self.model_config['pretrain_judge'] == 'True':
                 lora_r = self.model_config["lora_r"]
                 lora_reduce = self.model_config["lora_reduce"]
                 dropout_rate = self.model_config["dropout"]
                 for i, h_dim in enumerate(self.model_config['hidden_dim']):
-                    lora_reduce_list = self.model_config["lora_reduce_list"][i] if "lora_reduce_list" in self.model_config else []
-                    lora_weight_list = self.model_config["lora_weight_list"][i] if "lora_reduce_list" in self.model_config else []
                     x = MLoRAFCN_PRE(self.n_domain, h_dim, activation="relu", lora_r=lora_r, lora_reduce=lora_reduce, dropout_rate=dropout_rate,
-                                 is_finetune=self.train_config['train_from_ckp'],
-                                 lora_reduce_list=lora_reduce_list,
-                                 lora_weight_list=lora_weight_list
+                                 is_finetune=self.train_config['train_from_ckp']
                                  )([x, domain_indicator])
             elif self.model_config['pretrain_judge'] == "False":
                 lora_r = self.model_config["lora_r"]
                 lora_reduce = self.model_config["lora_reduce"]
                 dropout_rate = self.model_config["dropout"]
                 for i, h_dim in enumerate(self.model_config['hidden_dim']):
-                    lora_reduce_list = self.model_config["lora_reduce_list"][i] if "lora_reduce_list" in self.model_config else []
-                    lora_weight_list = self.model_config["lora_weight_list"][i] if "lora_reduce_list" in self.model_config else []
                     x = MLoRAFCN_FREEZE(self.n_domain, h_dim, activation="relu", lora_r=lora_r, lora_reduce=lora_reduce, dropout_rate=dropout_rate,
-                                 is_finetune=self.train_config['train_from_ckp'],
-                                 lora_reduce_list=lora_reduce_list,
-                                 lora_weight_list=lora_weight_list
+                                 is_finetune=self.train_config['train_from_ckp']
                                  )([x, domain_indicator])
-        elif "mlora_generator" in self.model_config['dense']:
-            if self.model_config['pretrain_judge'] == 'True':
-                lora_r = self.model_config["lora_r"]
-                lora_reduce = self.model_config["lora_reduce"]
-                dropout_rate = self.model_config["dropout"]
-                for h_dim in self.model_config['hidden_dim']:
-                    x = MLoRAFCN_GENERATOR_PRETRAIN(self.n_domain, h_dim, activation="relu", lora_r=lora_r, lora_reduce=lora_reduce,
-                                     dropout_rate=dropout_rate,
-                                     is_finetune=self.train_config['train_from_ckp'],
-                                     )([x, domain_indicator,domain_emb])
-            elif self.model_config['pretrain_judge'] == "False":
-                lora_r = self.model_config["lora_r"]
-                lora_reduce = self.model_config["lora_reduce"]
-                dropout_rate = self.model_config["dropout"]
-                for h_dim in self.model_config['hidden_dim']:
-                    x = MLoRAFCN_GENERATOR(self.n_domain, h_dim, activation="relu", lora_r=lora_r, lora_reduce=lora_reduce,
-                                     dropout_rate=dropout_rate,
-                                     is_finetune=self.train_config['train_from_ckp'],
-                                     )([x, domain_indicator,domain_emb])
 
-        elif "mlora_star_freeze" in self.model_config['dense']:
-            assert self.model_config['pretrain_judge'] == 'False',"该方案应提前导入star获得的MLP参数后进行mlora的finetune"
-            lora_r = self.model_config["lora_r"]
-            lora_reduce = self.model_config["lora_reduce"]
-            dropout_rate = self.model_config["dropout"]
-            for h_dim in self.model_config['hidden_dim']:
-                x = MLoRAFCN_FREEZE(self.n_domain, h_dim, activation="relu", lora_r=lora_r, lora_reduce=lora_reduce,
-                                    dropout_rate=dropout_rate,
-                                    is_finetune=self.train_config['train_from_ckp'],
-                                    )([x, domain_indicator])
 
         # freeze dense层
         if "freeze" in self.model_config['dense']:

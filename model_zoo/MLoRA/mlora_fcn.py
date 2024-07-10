@@ -22,8 +22,7 @@ class MLoRAFCN(Layer):
     def __init__(self,
                  n_domain,
                  units,
-                 n_domain_1=-1,
-                 n_domain_2=-1,
+
                  activation=None,
                  use_bias=True,
                  kernel_initializer='glorot_uniform',
@@ -35,8 +34,6 @@ class MLoRAFCN(Layer):
                  bias_constraint=None,
                  lora_r=4,
                  lora_reduce=-1,
-                 lora_reduce_list=[],
-                 lora_weight_list = [],
                  dropout_rate=0.5,
                  is_finetune=False,
                  **kwargs):
@@ -46,8 +43,7 @@ class MLoRAFCN(Layer):
         super(MLoRAFCN, self).__init__(
             activity_regularizer=regularizers.get(activity_regularizer), **kwargs)
         self.n_domain = n_domain
-        self.n_domain_1 = n_domain_1
-        self.n_domain_2 = n_domain_2
+
         self.units = int(units)
         self.activation = activations.get(activation)
         self.use_bias = use_bias
@@ -65,15 +61,6 @@ class MLoRAFCN(Layer):
         if lora_r < 1 and lora_reduce >= 1:
             self.lora_r = max(int(units/lora_reduce), 1)
 
-        # Alora
-        self.lora_r_list = []
-        for alpha in lora_reduce_list:
-            if lora_r < 1 and lora_reduce >= 1:
-                self.lora_r_list.append(max(int(units / alpha), 1))
-        self.lora_weight_list = []
-        for w in lora_weight_list:
-            self.lora_weight_list.append(tf.constant(w, dtype=tf.float32))
-       ##############
         self.is_finetune = tf.constant(1.0 if is_finetune else 0.0, dtype=tf.float32)
 
     def build(self, input_shape):
@@ -128,52 +115,7 @@ class MLoRAFCN(Layer):
         else:
             self.domain_bias = None
 
-
-        self.a_kernel_list = []
-        for i, r in enumerate(self.lora_r_list):
-            self.a_kernel_list.append(
-                self.add_weight(
-                    "A_Kernel_".format(i),
-                    shape=[self.n_domain, input_shape[-1].value, r],
-                    initializer=self.kernel_initializer,
-                    regularizer=self.kernel_regularizer,
-                    constraint=self.kernel_constraint,
-                    dtype=self.dtype,
-                    trainable=True)
-            )
-
-        self.b_kernel_list = []
-        for i, r in enumerate(self.lora_r_list):
-            self.b_kernel_list.append(
-                self.add_weight(
-                    "B_Kernel_".format(i),
-                    shape=[self.n_domain, r, self.units],
-                    initializer=self.kernel_initializer,
-                    regularizer=self.kernel_regularizer,
-                    constraint=self.kernel_constraint,
-                    dtype=self.dtype,
-                    trainable=True)
-            )
-
-        if self.use_bias:
-            self.domain_bias_list = []
-            for i, r in enumerate(self.lora_r_list):
-                self.domain_bias_list.append(
-                    self.add_weight(
-                        "domain_bias",
-                        shape=[self.n_domain, self.units],
-                        initializer=self.bias_initializer,
-                        regularizer=self.bias_regularizer,
-                        constraint=self.bias_constraint,
-                        dtype=self.dtype,
-                        trainable=True)
-                )
-            print("self.domain_bias", self.domain_bias)
-            # self.domain_bias1 = self.is_finetune * self.domain_bias1 + (1.0 - self.is_finetune) * tf.stop_gradient(self.domain_bias1)
-        else:
-            self.domain_bias_list = []
-
-
+        # MLP weight and bias
         self.kernel = self.add_weight(
             "kernel",
             shape=[input_shape[-1].value, self.units],
@@ -220,68 +162,25 @@ class MLoRAFCN(Layer):
         inputs = ops.convert_to_tensor(inputs, dtype=self.dtype)
         rank = common_shapes.rank(inputs)
 
-        # Partition by domain
-        if rank > 2:
-            # Broadcasting is required for the inputs.
-            outputs = standard_ops.tensordot(inputs, self.kernel, [[rank - 1], [0]])
-            # Reshape the output back to the original ndim of the input.
-            if not context.executing_eagerly():
-                shape = inputs.get_shape().as_list()
-                output_shape = shape[:-1] + [self.units]
-                outputs.set_shape(output_shape)
-        else:
-            outputs = gen_math_ops.mat_mul(inputs, self.kernel)
+        #MLP
+        outputs = gen_math_ops.mat_mul(inputs, self.kernel)
         if self.use_bias:
             outputs = nn.bias_add(outputs, self.bias)
         outputs = self.dropout_layers(outputs, training=training)
-        # outputs = layers.BatchNormalization()(outputs)
 
+        # domain
         idx = tf.cast(domain_indicator[0, 0], tf.int32)
-        if not self.lora_weight_list:
-            domain_a_kernel = nn.embedding_lookup(self.a_kernel, idx)
-            domain_b_kernel = nn.embedding_lookup(self.b_kernel, idx)
-            if self.use_bias:
-                domain_bias = nn.embedding_lookup(self.domain_bias, idx)
-            # domain
-            if rank > 2:
-                # Broadcasting is required for the inputs.
-                domain_outputs = standard_ops.tensordot(inputs, domain_a_kernel, [[rank - 1], [0]])
-                domain_outputs = standard_ops.tensordot(domain_outputs, domain_b_kernel, [[rank - 1], [0]])
-                # Reshape the output back to the original ndim of the input.
-                if not context.executing_eagerly():
-                    shape = inputs.get_shape().as_list()
-                    output_shape = shape[:-1] + [self.units]
-                    domain_outputs.set_shape(output_shape)
-            else:
-                domain_outputs = gen_math_ops.mat_mul(inputs, domain_a_kernel)
-                domain_outputs = gen_math_ops.mat_mul(domain_outputs, domain_b_kernel)
-            if self.use_bias:
-                domain_outputs = nn.bias_add(domain_outputs, domain_bias)
-            # domain_outputs1 = DomainNorm(self.n_domain_1)([domain_outputs1, domain_indicator1])
-            outputs += domain_outputs
-        else:
-            for i in range(len(self.lora_weight_list)):
-                domain_a_kernel = nn.embedding_lookup(self.a_kernel_list[i], idx)
-                domain_b_kernel = nn.embedding_lookup(self.b_kernel_list[i], idx)
-                if self.use_bias:
-                    domain_bias = nn.embedding_lookup(self.domain_bias_list[i], idx)
-                # domain
-                if rank > 2:
-                    # Broadcasting is required for the inputs.
-                    domain_outputs = standard_ops.tensordot(inputs, domain_a_kernel, [[rank - 1], [0]])
-                    domain_outputs = standard_ops.tensordot(domain_outputs, domain_b_kernel, [[rank - 1], [0]])
-                    # Reshape the output back to the original ndim of the input.
-                    if not context.executing_eagerly():
-                        shape = inputs.get_shape().as_list()
-                        output_shape = shape[:-1] + [self.units]
-                        domain_outputs.set_shape(output_shape)
-                else:
-                    domain_outputs = gen_math_ops.mat_mul(inputs, domain_a_kernel)
-                    domain_outputs = gen_math_ops.mat_mul(domain_outputs, domain_b_kernel)
-                if self.use_bias:
-                    domain_outputs = nn.bias_add(domain_outputs, domain_bias)
-                # domain_outputs1 = DomainNorm(self.n_domain_1)([domain_outputs1, domain_indicator1])
-                outputs += domain_outputs * self.lora_weight_list[i]
+        domain_a_kernel = nn.embedding_lookup(self.a_kernel, idx)
+        domain_b_kernel = nn.embedding_lookup(self.b_kernel, idx)
+        if self.use_bias:
+            domain_bias = nn.embedding_lookup(self.domain_bias, idx)
+        domain_outputs = gen_math_ops.mat_mul(inputs, domain_a_kernel)
+        domain_outputs = gen_math_ops.mat_mul(domain_outputs, domain_b_kernel)
+        if self.use_bias:
+            domain_outputs = nn.bias_add(domain_outputs, domain_bias)
+        # domain_outputs1 = DomainNorm(self.n_domain_1)([domain_outputs1, domain_indicator1])
+        outputs += domain_outputs
+
 
         if self.activation is not None:
             return self.activation(outputs)  # pylint: disable=not-callable

@@ -13,8 +13,6 @@ from .partitioned_norm import PartitionedNorm
 from .star_fcn import StarFCN
 from .auxiliary_net import AuxiliaryNet
 from ..base_model import BaseModel
-from .star_fcn_mlora_pretrain_col import StarFCN as Star_FCN_mlora_pretrain_col
-from .star_fcn_mlora_finetune_col import StarFCN as Star_FCN_mlora_finetune_col
 class Star(BaseModel):
     def __init__(self, dataset, config):
         super(Star, self).__init__(dataset, config)
@@ -107,13 +105,7 @@ class Star(BaseModel):
         elif self.model_config['dense'] == "star":
             for h_dim in self.model_config['hidden_dim']:
                 x = StarFCN(self.n_domain, h_dim, activation="relu")([x, domain_indicator])
-        elif 'star_mlora_col' in self.model_config['dense']:
-            if self.model_config['pretrain_judge'] == 'True':
-                for h_dim in self.model_config['hidden_dim']:
-                    x = Star_FCN_mlora_pretrain_col(self.n_domain, h_dim, activation="relu")([x, domain_indicator])
-            if self.model_config['pretrain_judge'] == 'False':
-                for h_dim in self.model_config['hidden_dim']:
-                    x = Star_FCN_mlora_finetune_col(self.n_domain, h_dim, activation="relu")([x, domain_indicator])
+
         if self.model_config['auxiliary_net']:
             x = layers.Add()([x, aux_out])
 

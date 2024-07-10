@@ -81,18 +81,12 @@ def main(config):
 
 
     # Train Model
-    if "separate" in config['model']['name']:
-        avg_loss, avg_auc, domain_loss, domain_auc = model.separate_train_val_test()
-    else:
-        model.train()
 
-        print("Test Result: ")
-        if "meta" in config['model']['name'] and model.train_config['meta_finetune_step'] > 0:
-            graph = tf.get_default_graph()
-            if graph.finalized:
-                graph._unsafe_unfinalize()
+    model.train()
 
-        avg_loss, avg_auc, domain_loss, domain_auc = model.val_and_test("test")
+    print("Test Result: ")
+
+    avg_loss, avg_auc, domain_loss, domain_auc = model.val_and_test("test")
 
     # retrain Model
     if "freeze" in config['model']['dense']:
@@ -123,11 +117,6 @@ def main(config):
 
         model.train()
 
-    # Finetune the model on different domains
-    if "finetune" in config['model']['name']:
-        model.load_model(model.checkpoint_path)
-        print("Finetune: ")
-        avg_loss, avg_auc, domain_loss, domain_auc = model.separate_train_val_test(init_parms=False)
 
     model.save_result(avg_loss, avg_auc, domain_loss, domain_auc)
 

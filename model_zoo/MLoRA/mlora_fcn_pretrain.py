@@ -35,8 +35,6 @@ class MLoRAFCN(Layer):
                  bias_constraint=None,
                  lora_r=4,
                  lora_reduce=-1,
-                 lora_reduce_list=[],
-                 lora_weight_list=[],
                  dropout_rate=0.5,
                  is_finetune=False,
                  **kwargs):
@@ -64,16 +62,6 @@ class MLoRAFCN(Layer):
         self.lora_r = lora_r
         if lora_r < 1 and lora_reduce >= 1:
             self.lora_r = max(int(units/lora_reduce), 1)
-
-        # Alora
-        self.lora_r_list = []
-        for alpha in lora_reduce_list:
-            if lora_r < 1 and lora_reduce >= 1:
-                self.lora_r_list.append(max(int(units / alpha), 1))
-        self.lora_weight_list = []
-        for w in lora_weight_list:
-            self.lora_weight_list.append(tf.constant(w, dtype=tf.float32))
-        ##########
         self.is_finetune = tf.constant(1.0 if is_finetune else 0.0, dtype=tf.float32)
 
     def build(self, input_shape):
@@ -90,7 +78,7 @@ class MLoRAFCN(Layer):
         self.a_kernel = self.add_weight(
             "A_Kernel",
             shape=[self.n_domain, input_shape[-1].value, self.lora_r],
-            initializer=self.kernel_initializer,
+            initializer=self.bias_initializer,
             regularizer=self.kernel_regularizer,
             constraint=self.kernel_constraint,
             dtype=self.dtype,
@@ -124,49 +112,7 @@ class MLoRAFCN(Layer):
             # self.domain_bias1 = self.is_finetune * self.domain_bias1 + (1.0 - self.is_finetune) * tf.stop_gradient(self.domain_bias1)
         else:
             self.domain_bias = None
-        self.a_kernel_list = []
-        for i, r in enumerate(self.lora_r_list):
-            self.a_kernel_list.append(
-                self.add_weight(
-                    "A_Kernel_".format(i),
-                    shape=[self.n_domain, input_shape[-1].value, r],
-                    initializer=self.kernel_initializer,
-                    regularizer=self.kernel_regularizer,
-                    constraint=self.kernel_constraint,
-                    dtype=self.dtype,
-                    trainable=False)
-            )
 
-        self.b_kernel_list = []
-        for i, r in enumerate(self.lora_r_list):
-            self.b_kernel_list.append(
-                self.add_weight(
-                    "B_Kernel_".format(i),
-                    shape=[self.n_domain, r, self.units],
-                    initializer=self.kernel_initializer,
-                    regularizer=self.kernel_regularizer,
-                    constraint=self.kernel_constraint,
-                    dtype=self.dtype,
-                    trainable=False)
-            )
-
-        if self.use_bias:
-            self.domain_bias_list = []
-            for i, r in enumerate(self.lora_r_list):
-                self.domain_bias_list.append(
-                    self.add_weight(
-                        "domain_bias",
-                        shape=[self.n_domain, self.units],
-                        initializer=self.bias_initializer,
-                        regularizer=self.bias_regularizer,
-                        constraint=self.bias_constraint,
-                        dtype=self.dtype,
-                        trainable=False)
-                )
-            print("self.domain_bias", self.domain_bias)
-            # self.domain_bias1 = self.is_finetune * self.domain_bias1 + (1.0 - self.is_finetune) * tf.stop_gradient(self.domain_bias1)
-        else:
-            self.domain_bias_list = []
 
 
         self.kernel = self.add_weight(
