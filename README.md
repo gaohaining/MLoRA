@@ -160,6 +160,22 @@ python run.py config/Taobao_10/wdl_mlora.json
 Training would stop when the model's performance failed to exceed the best performance achieved in previous training epochs for a consecutive number of times. More details in our paper.
 ```
 
+## Our Team
+Zhiming Yang: Graduate student at Northwestern Polytechnical University
+
+Haining Gao: Senior Algorithm Engineer at Alibaba Group
+
+Dehong Gao: Professor at Northwestern Polytechnical University. Please refer to his [personal homepage](https://scholar.google.com/citations?user=0uPb8MMAAAAJ&hl=zh-CN) for details.
+
+Luwei Yang: Algorithm Expert at Alibaba Group. Please refer to his [personal homepage](https://luweiyang.com/) for details.
+
+Libin Yang: Professor at Northwestern Polytechnical University
+
+Xiaoyan Cai: Professor at Northwestern Polytechnical University
+
+Wei Ning: Algorithm Expert at Alibaba Group
+
+Guannan Zhang: Algorithm Expert at Alibaba Group
 ## Acknowledgments
 
 Parts of this project utilize code from the following open-source projects:
